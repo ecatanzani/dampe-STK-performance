@@ -81,8 +81,7 @@ def parseCalLocalDirs(local_cal_dir: str) -> dict:
 
 
 def buildEvFigure(time_evolution: dict, plt_variable:str, plt_variable_label: str, plt_color: str, plt_path: str):
-    plt.clf()
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(clear=True)
     ax.plot(time_evolution['date'], time_evolution[plt_variable], label=plt_variable_label, color=plt_color)
     ax.xaxis.set_major_locator(mdates.MonthLocator(interval=6))
     ax.xaxis.set_minor_locator(mdates.MonthLocator())
