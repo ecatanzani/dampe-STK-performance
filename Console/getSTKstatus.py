@@ -1,5 +1,4 @@
 from argparse import ArgumentParser
-import streamlit as st
 import sys
 
 
@@ -21,10 +20,12 @@ def main(args=None):
 
     # Get dictionary from config file parsing
     pars = parseConfigFile()
+    status = True
     if not opts.local:
         # Download cal files
         status = getCalFiles(pars, opts)
-    buildStkPlots(opts)
+    if status:
+        buildStkPlots(opts, pars)
 
 if __name__ == '__main__':
     main()

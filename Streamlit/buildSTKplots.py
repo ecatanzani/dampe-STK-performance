@@ -1,13 +1,9 @@
-import matplotlib
 from datetime import date
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 from datetime import date
 import streamlit as st
 import pandas as pd
 import numpy as np
-import argparse
-import sys
+import matplotlib
 import os
 
 def getDateFromDir(local_cal_dir: str) -> date:
@@ -133,40 +129,38 @@ def parseCalLocalDirs(local_cal_dir: str, start_date: date, end_date: date, date
         bar.progress(round(perc_complete, 1))
     return {'date': caldate, 'sigma': sigma, 'sigma_row': sigma_row, 'pedestal': ped, 'cn': cn, 'chfrac_s5': chfrac_s5, 'chfrac_s510': chfrac_s510, 'chfrac_s10': chfrac_s10}
 
-
 def buildEvFigure(time_evolution: dict, plt_variable: str, plt_variable_label: str, plt_color: str, xaxis_interval: int, plt_path: str) -> matplotlib.figure:
-    fig, ax = plt.subplots(clear=True)
+    fig, ax = matplotlib.pyplot.subplots(clear=True)
     ax.plot(time_evolution['date'], time_evolution[plt_variable], label=plt_variable_label, color=plt_color)
     if xaxis_interval:
-        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=xaxis_interval))
+        ax.xaxis.set_major_locator(matplotlib.dates.MonthLocator(interval=xaxis_interval))
         if xaxis_interval<=3:
-            ax.xaxis.set_minor_locator(mdates.DayLocator())
+            ax.xaxis.set_minor_locator(matplotlib.dates.DayLocator())
         else:
-            ax.xaxis.set_minor_locator(mdates.MonthLocator())
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+            ax.xaxis.set_minor_locator(matplotlib.dates.MonthLocator())
+            ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%Y-%m'))
     fig.autofmt_xdate()
-    plt.savefig(plt_path)
+    matplotlib.pyplot.savefig(plt_path)
     return fig
 
 def buildChSigmaEv(time_evolution: dict, xaxis_interval: int, plt_path: str) -> matplotlib.figure:
-    
-    fig, ax = plt.subplots(clear=True)
+    fig, ax = matplotlib.pyplot.subplots(clear=True)
     ax.plot(time_evolution['date'], time_evolution['chfrac_s5'], label='ch frac sigma < 5', color='cornflowerblue')
     ax.plot(time_evolution['date'], time_evolution['chfrac_s510'], label='ch frac 5 < sigma < 10', color='sandybrown')
     ax.plot(time_evolution['date'], time_evolution['chfrac_s10'], label='ch frac sigma > 10', color='firebrick')
     if xaxis_interval:
-        ax.xaxis.set_major_locator(mdates.MonthLocator(interval=xaxis_interval))
+        ax.xaxis.set_major_locator(matplotlib.dates.MonthLocator(interval=xaxis_interval))
         if xaxis_interval<=3:
-            ax.xaxis.set_minor_locator(mdates.DayLocator())
+            ax.xaxis.set_minor_locator(matplotlib.dates.DayLocator())
         else:
-            ax.xaxis.set_minor_locator(mdates.MonthLocator())
-            ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+            ax.xaxis.set_minor_locator(matplotlib.dates.MonthLocator())
+            ax.xaxis.set_major_formatter(matplotlib.dates.DateFormatter('%Y-%m'))
     fig.autofmt_xdate()
-    plt.savefig(plt_path)
+    matplotlib.pyplot.savefig(plt_path)
     return fig
 
 def buildVariableDistribution(time_evolution: dict, plt_variable: str, bins: int, xrange: tuple) -> matplotlib.figure:
-    fig, ax = plt.subplots(clear=True)
+    fig, ax = matplotlib.pyplot.subplots(clear=True)
     ax.hist(time_evolution[plt_variable], bins, density=True, range=xrange)
     return fig
 
