@@ -97,7 +97,7 @@ def downloadSingleFile(file: str, file_date: date, local_dir: str, config: dict,
     subprocess.run(downloadDataCommand, shell=True, check=True, stdout=subprocess.PIPE)
 
 def downloadSingleFolder(remote_folder: str, folder_date: date, local_dir: str, config: dict):
-    downloadDataCommand = f"xrdcp -r {config['farmAddress']}/{remote_folder} {local_dir}/{getdate_str(folder_date)}"
+    downloadDataCommand = f"xrdcp -r --force {config['farmAddress']}/{remote_folder} {local_dir}/{getdate_str(folder_date)}"
     print(f"Downloading folder: {format(downloadDataCommand)}")
     subprocess.run(downloadDataCommand, shell=True, check=True, stdout=subprocess.PIPE)
 
