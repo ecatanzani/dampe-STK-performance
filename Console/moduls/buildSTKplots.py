@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from matplotlib import rcParams
 import argparse
 import os
 
@@ -123,7 +124,7 @@ def parseCalLocalDirs(local_cal_dir: str, opts: argparse.Namespace, config: dict
         chfrac_s10.append(getChannelFraction(ladder_dicts[6]))
     return {'date': caldate, 'sigma': sigma, 'sigma_row': sigma_row, 'pedestal': ped, 'cn': cn, 'chfrac_s5': chfrac_s5, 'chfrac_s510': chfrac_s510, 'chfrac_s10': chfrac_s10}
 
-def buildEvFigure(time_evolution: dict, plt_variable: str, plt_variable_label: str, plt_color: str, xaxis_interval: int, plt_path: str) -> plt.figure:
+def buildEvFigure(time_evolution: dict, plt_variable: str, plt_variable_label: str, plt_color: str, xaxis_interval: int, yaxis_title: str, plt_path: str) -> plt.figure:
     fig, ax = plt.subplots(clear=True)
     ax.plot(time_evolution['date'], time_evolution[plt_variable], label=plt_variable_label, color=plt_color)
     if xaxis_interval:
@@ -134,12 +135,14 @@ def buildEvFigure(time_evolution: dict, plt_variable: str, plt_variable_label: s
             ax.xaxis.set_minor_locator(mdates.MonthLocator())
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
     fig.autofmt_xdate()
+    ax.set_ylabel(yaxis_title, fontsize=10)
     plt.savefig(plt_path)
     return fig
 
 def buildChSigmaEv(time_evolution: dict, xaxis_interval: int, plt_path: str) -> plt.figure:
+    rcParams.update({'figure.autolayout': True})
     fig, ax = plt.subplots(clear=True)
-    ax.plot(time_evolution['date'], time_evolution['chfrac_s5'], label='ch frac sigma < 5', color='cornflowerblue')
+    #ax.plot(time_evolution['date'], time_evolution['chfrac_s5'], label='ch frac sigma < 5', color='cornflowerblue')
     ax.plot(time_evolution['date'], time_evolution['chfrac_s510'], label='ch frac 5 < sigma < 10', color='sandybrown')
     ax.plot(time_evolution['date'], time_evolution['chfrac_s10'], label='ch frac sigma > 10', color='firebrick')
     if xaxis_interval:
@@ -150,6 +153,7 @@ def buildChSigmaEv(time_evolution: dict, xaxis_interval: int, plt_path: str) -> 
             ax.xaxis.set_minor_locator(mdates.MonthLocator())
             ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
     fig.autofmt_xdate()
+    plt.legend(bbox_to_anchor=(1.05, 0.5), loc='center left')
     plt.savefig(plt_path)
     return fig
 
@@ -165,13 +169,12 @@ def buildStkPlots(opts: argparse.Namespace, config: dict):
     
     xinterval = 6
     time_evolution = parseCalLocalDirs(local_cal_dir, opts, config)
-    buildEvFigure(time_evolution, plt_variable="sigma", plt_variable_label="sigma", plt_color="firebrick", xaxis_interval=xinterval, plt_path="sigma_evolution.pdf")
-    buildEvFigure(time_evolution, plt_variable="sigma_row", plt_variable_label="sigma raw", plt_color="darkorange", xaxis_interval=xinterval, plt_path="sigmaraw_evolution.pdf")
-    buildEvFigure(time_evolution, plt_variable="pedestal", plt_variable_label="pedestal", plt_color="forestgreen", xaxis_interval=xinterval, plt_path="pedestal_evolution.pdf")
-    buildEvFigure(time_evolution, plt_variable="cn", plt_variable_label="common noise", plt_color="mediumturquoise", xaxis_interval=xinterval, plt_path="cn_evolution.pdf")
-    buildChSigmaEv(time_evolution, xaxis_interval=xinterval, plt_path="channel_noise_evolution.pdf")
-    buildEvFigure(time_evolution, plt_variable="chfrac_s5", plt_variable_label="ch frac sigma < 5", plt_color="cornflowerblue", xaxis_interval=xinterval, plt_path="chfrac_sigma_5.pdf")
-    buildEvFigure(time_evolution, plt_variable="chfrac_s510", plt_variable_label="ch frac 5 < sigma < 10", plt_color="sandybrown", xaxis_interval=xinterval, plt_path="chfrac_sigma_5_10.pdf")
-    buildEvFigure(time_evolution, plt_variable="chfrac_s10", plt_variable_label="ch frac sigma > 10", plt_color="firebrick", xaxis_interval=xinterval, plt_path="chfrac_sigma_10.pdf")
-     
+    buildEvFigure(time_evolution, plt_variable="sigma", plt_variable_label="sigma", plt_color="firebrick", xaxis_interval=xinterval, yaxis_title="sigma", plt_path="sigma_evolution.pdf")
+    buildEvFigure(time_evolution, plt_variable="sigma_row", plt_variable_label="sigma raw", plt_color="darkorange", xaxis_interval=xinterval, yaxis_title="sigma row", plt_path="sigmaraw_evolution.pdf")
+    buildEvFigure(time_evolution, plt_variable="pedestal", plt_variable_label="pedestal", plt_color="forestgreen", xaxis_interval=xinterval, yaxis_title="pedestal" , plt_path="pedestal_evolution.pdf")
+    buildEvFigure(time_evolution, plt_variable="cn", plt_variable_label="common noise", plt_color="mediumturquoise", xaxis_interval=xinterval, yaxis_title="common noise", plt_path="cn_evolution.pdf")
+    buildEvFigure(time_evolution, plt_variable="chfrac_s5", plt_variable_label="ch frac sigma < 5", plt_color="cornflowerblue", xaxis_interval=xinterval, yaxis_title="channel fraction sigma < 5", plt_path="chfrac_sigma_5.pdf")
+    buildEvFigure(time_evolution, plt_variable="chfrac_s510", plt_variable_label="ch frac 5 < sigma < 10", plt_color="sandybrown", xaxis_interval=xinterval, yaxis_title="channel fraction 5 < sigma < 10", plt_path="chfrac_sigma_5_10.pdf")
+    buildEvFigure(time_evolution, plt_variable="chfrac_s10", plt_variable_label="ch frac sigma > 10", plt_color="firebrick", xaxis_interval=xinterval, yaxis_title="channel fraction sigma > 10", plt_path="chfrac_sigma_10.pdf")
+    buildChSigmaEv(time_evolution, xaxis_interval=xinterval, plt_path="channel_noise_evolution.pdf") 
 
