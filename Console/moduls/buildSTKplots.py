@@ -1,10 +1,11 @@
-from datetime import date
+from datetime import date, time
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib import rcParams
+from ROOT import TFile, TH2D, TProfile, TDatime, TCanvas, gStyle, gROOT, gPad
 import argparse
 import os
 
@@ -78,6 +79,12 @@ def getMeanValue(valdict: dict) -> float:
         trb_meanvalues.append(np.array(list(valdict[trb_value].values())).mean())
     return np.array(trb_meanvalues).mean()
 
+def getValues(valdict: dict) -> list:
+    ladder_values = []
+    for trb_value in valdict:
+        ladder_values += list(valdict[trb_value].values())
+    return ladder_values
+
 def getChannelFraction(valdict: dict) -> float:
     ch_ladder = 384
     ch_selected = 0
@@ -97,9 +104,13 @@ def purgeDirs(filelist: list, config:list) -> list:
 def parseCalLocalDirs(local_cal_dir: str, opts: argparse.Namespace, config: dict) -> dict:
     caldate = []
     sigma = []
-    sigma_row = []
+    sigma_values = []
+    sigma_raw = []
+    sigma_raw_values = []
     ped = []
+    ped_values = []
     cn = []
+    cn_values = []
     chfrac_s5 = []
     chfrac_s510 = []
     chfrac_s10 = []
@@ -116,13 +127,17 @@ def parseCalLocalDirs(local_cal_dir: str, opts: argparse.Namespace, config: dict
         caldate.append(getDateFromDir(cal_folder))
         ladder_dicts = readCalDict(buildCalDict(cal_folder))
         sigma.append(getMeanValue(ladder_dicts[0]))
-        sigma_row.append(getMeanValue(ladder_dicts[1]))
+        sigma_values.append(getValues(ladder_dicts[0]))
+        sigma_raw.append(getMeanValue(ladder_dicts[1]))
+        sigma_raw_values.append(getValues(ladder_dicts[1]))
         ped.append(getMeanValue(ladder_dicts[2]))
+        ped_values.append(getValues(ladder_dicts[2]))
         cn.append(getMeanValue(ladder_dicts[3]))
+        cn_values.append(getValues(ladder_dicts[3]))
         chfrac_s5.append(getChannelFraction(ladder_dicts[4]))
         chfrac_s510.append(getChannelFraction(ladder_dicts[5]))
         chfrac_s10.append(getChannelFraction(ladder_dicts[6]))
-    return {'date': caldate, 'sigma': sigma, 'sigma_row': sigma_row, 'pedestal': ped, 'cn': cn, 'chfrac_s5': chfrac_s5, 'chfrac_s510': chfrac_s510, 'chfrac_s10': chfrac_s10}
+    return {'date': caldate, 'sigma': sigma, 'sigma_values': sigma_values, 'sigma_raw': sigma_raw, 'sigma_raw_values': sigma_raw_values, 'pedestal': ped, 'pedestal_values': ped_values, 'cn': cn, 'cn_values': cn_values, 'chfrac_s5': chfrac_s5, 'chfrac_s510': chfrac_s510, 'chfrac_s10': chfrac_s10}
 
 def buildEvFigure(time_evolution: dict, plt_variable: str, plt_variable_label: str, plt_color: str, xaxis_interval: int, yaxis_title: str, plt_path: str) -> plt.figure:
     fig, ax = plt.subplots(clear=True)
@@ -162,6 +177,183 @@ def buildVariableDistribution(time_evolution: dict, plt_variable: str, bins: int
     ax.hist(time_evolution[plt_variable], bins, density=True, range=xrange)
     return fig
 
+def buildROOThistos(time_evolution: dict, out_filename: str):
+    outfile = TFile(out_filename, "RECREATE")
+    if not outfile.IsOpen():
+        print(f"Error writing output TFile: [{out_filename}]")
+
+    start_time = TDatime(time_evolution['date'][0].year, time_evolution['date'][0].month, time_evolution['date'][0].day, 12, 0, 0).Convert()
+    end_time = TDatime(time_evolution['date'][-1].year, time_evolution['date'][-1].month, time_evolution['date'][-1].day, 12, 0, 0).Convert()
+    bins = int((end_time-start_time)/86400)
+    
+    sigma_evolution = TH2D("sigma_evolution", "#sigma time evolution", bins, start_time, end_time, 100, 2, 4)
+    sigma_evolution_profile = TProfile("sigma_evolution_profile", "#sigma time evolution - profile", bins, start_time, end_time, 2, 4)
+
+    sigma_raw_evolution = TH2D("sigma_raw_evolution", "#sigma_{raw} time evolution", bins, start_time, end_time, 100, 10, 13)
+    sigma_raw_evolution_profile = TProfile("sigma_raw_evolution_profile", "#sigma_{raw} time evolution - profile", bins, start_time, end_time, 10, 13)
+
+    pedestal_evolution = TH2D("pedestal_evolution", "pedestal time evolution", bins, start_time, end_time, 100, 100, 400)
+    pedestal_evolution_profile = TProfile("spedestal_evolution_profile", "pedestal time evolution - profile", bins, start_time, end_time, 100, 400)
+
+    cn_evolution = TH2D("cn_evolution", "Common Noise time evolution", bins, start_time, end_time, 100, 9, 13)
+    cn_evolution_profile = TProfile("cn_evolution_profile", "Common Noise time evolution - profile", bins, start_time, end_time, 9, 13)
+
+    for idx, ladder_values in enumerate(time_evolution['sigma_values']):
+        for single_value in ladder_values:
+            tmpdate = TDatime(time_evolution['date'][idx].year, time_evolution['date'][idx].month, time_evolution['date'][idx].day, 12, 0, 0).Convert()
+            sigma_evolution.Fill(tmpdate, single_value)
+            sigma_evolution_profile.Fill(tmpdate, single_value)
+    
+    for idx, ladder_values in enumerate(time_evolution['sigma_raw_values']):
+        for single_value in ladder_values:
+            tmpdate = TDatime(time_evolution['date'][idx].year, time_evolution['date'][idx].month, time_evolution['date'][idx].day, 12, 0, 0).Convert()
+            sigma_raw_evolution.Fill(tmpdate, single_value)
+            sigma_raw_evolution_profile.Fill(tmpdate, single_value)
+
+    for idx, ladder_values in enumerate(time_evolution['pedestal_values']):
+        for single_value in ladder_values:
+            tmpdate = TDatime(time_evolution['date'][idx].year, time_evolution['date'][idx].month, time_evolution['date'][idx].day, 12, 0, 0).Convert()
+            pedestal_evolution.Fill(tmpdate, single_value)
+            pedestal_evolution_profile.Fill(tmpdate, single_value)
+
+    for idx, ladder_values in enumerate(time_evolution['cn_values']):
+        for single_value in ladder_values:
+            tmpdate = TDatime(time_evolution['date'][idx].year, time_evolution['date'][idx].month, time_evolution['date'][idx].day, 12, 0, 0).Convert()
+            cn_evolution.Fill(tmpdate, single_value)
+            cn_evolution_profile.Fill(tmpdate, single_value)
+    
+
+    sigma_evolution.GetXaxis().SetTimeDisplay(1)
+    sigma_evolution.GetXaxis().SetNdivisions(-503)
+    sigma_evolution.GetXaxis().SetTimeFormat("%Y-%m-%d")
+    sigma_evolution.GetXaxis().SetTimeOffset(0,"gmt")
+    sigma_evolution.GetYaxis().SetTitle("#sigma")
+    sigma_evolution.SetMarkerStyle(6)
+
+    sigma_evolution_profile.GetXaxis().SetTimeDisplay(1)
+    sigma_evolution_profile.GetXaxis().SetNdivisions(-503)
+    sigma_evolution_profile.GetXaxis().SetTimeFormat("%Y-%m-%d")
+    sigma_evolution_profile.GetXaxis().SetTimeOffset(0,"gmt")
+    sigma_evolution_profile.GetYaxis().SetTitle("#sigma")
+    sigma_evolution_profile.SetLineWidth(0)
+    sigma_evolution_profile.SetMarkerStyle(20)
+
+    sigma_raw_evolution.GetXaxis().SetTimeDisplay(1)
+    sigma_raw_evolution.GetXaxis().SetNdivisions(-503)
+    sigma_raw_evolution.GetXaxis().SetTimeFormat("%Y-%m-%d")
+    sigma_raw_evolution.GetXaxis().SetTimeOffset(0,"gmt")
+    sigma_raw_evolution.GetYaxis().SetTitle("#sigma_{raw}")
+    sigma_raw_evolution.SetMarkerStyle(6)
+    sigma_raw_evolution.GetYaxis().SetTitleOffset(1.3)
+    
+    sigma_raw_evolution_profile.GetXaxis().SetTimeDisplay(1)
+    sigma_raw_evolution_profile.GetXaxis().SetNdivisions(-503)
+    sigma_raw_evolution_profile.GetXaxis().SetTimeFormat("%Y-%m-%d")
+    sigma_raw_evolution_profile.GetXaxis().SetTimeOffset(0,"gmt")
+    sigma_raw_evolution_profile.GetYaxis().SetTitle("#sigma_{raw}")
+    sigma_raw_evolution_profile.SetLineWidth(0)
+    sigma_raw_evolution_profile.SetMarkerStyle(20)
+
+    pedestal_evolution.GetXaxis().SetTimeDisplay(1)
+    pedestal_evolution.GetXaxis().SetNdivisions(-503)
+    pedestal_evolution.GetXaxis().SetTimeFormat("%Y-%m-%d")
+    pedestal_evolution.GetXaxis().SetTimeOffset(0,"gmt")
+    pedestal_evolution.GetYaxis().SetTitle("pedestal")
+    pedestal_evolution.SetMarkerStyle(6)
+    
+    pedestal_evolution_profile.GetXaxis().SetTimeDisplay(1)
+    pedestal_evolution_profile.GetXaxis().SetNdivisions(-503)
+    pedestal_evolution_profile.GetXaxis().SetTimeFormat("%Y-%m-%d")
+    pedestal_evolution_profile.GetXaxis().SetTimeOffset(0,"gmt")
+    pedestal_evolution_profile.GetYaxis().SetTitle("pedestal")
+    pedestal_evolution_profile.SetLineWidth(0)
+    pedestal_evolution_profile.SetMarkerStyle(20)
+
+    cn_evolution.GetXaxis().SetTimeDisplay(1)
+    cn_evolution.GetXaxis().SetNdivisions(-503)
+    cn_evolution.GetXaxis().SetTimeFormat("%Y-%m-%d")
+    cn_evolution.GetXaxis().SetTimeOffset(0,"gmt")
+    cn_evolution.GetYaxis().SetTitle("Common Noise")
+    cn_evolution.SetMarkerStyle(6)
+
+    cn_evolution_profile.GetXaxis().SetTimeDisplay(1)
+    cn_evolution_profile.GetXaxis().SetNdivisions(-503)
+    cn_evolution_profile.GetXaxis().SetTimeFormat("%Y-%m-%d")
+    cn_evolution_profile.GetXaxis().SetTimeOffset(0,"gmt")
+    cn_evolution_profile.GetYaxis().SetTitle("Common Noise")
+    cn_evolution_profile.SetLineWidth(0)
+    cn_evolution_profile.SetMarkerStyle(20)
+
+    sigma_evolution.Write()
+    sigma_evolution_profile.Write()
+    sigma_raw_evolution.Write()
+    sigma_raw_evolution_profile.Write()
+    pedestal_evolution.Write()
+    pedestal_evolution_profile.Write()
+    cn_evolution.Write()
+    cn_evolution_profile.Write()
+    
+    gStyle.SetLineWidth(3)
+    
+    canvas_sigma = TCanvas("canvas_sigma", "sigma Time Evolution", 700, 700)
+    canvas_sigma.cd()
+    sigma_evolution.Draw()
+    sigma_evolution.SetStats(0)
+    sigma_evolution_profile.Draw("same")
+    gPad.Modified()
+    gPad.Update()
+    sigma_evolution.GetXaxis().SetLabelOffset(0.02)
+    sigma_evolution.GetYaxis().SetLabelOffset(0.01)
+    canvas_sigma.SetTicks()
+    gPad.Modified()
+    gPad.Update()
+
+    canvas_sigma_raw = TCanvas("canvas_sigma_raw", "sigma raw Time Evolution", 700, 700)
+    canvas_sigma_raw.cd()
+    sigma_raw_evolution.Draw()
+    sigma_raw_evolution.SetStats(0)
+    sigma_raw_evolution_profile.Draw("same")
+    gPad.Modified()
+    gPad.Update()
+    sigma_raw_evolution.GetXaxis().SetLabelOffset(0.02)
+    sigma_raw_evolution.GetYaxis().SetLabelOffset(0.01)
+    canvas_sigma_raw.SetTicks()
+    gPad.Modified()
+    gPad.Update()
+
+    canvas_pedestal = TCanvas("canvas_pedestal", "pedestal Time Evolution", 700, 700)
+    canvas_pedestal.cd()
+    pedestal_evolution.Draw()
+    pedestal_evolution.SetStats(0)
+    pedestal_evolution_profile.Draw("same")
+    gPad.Modified()
+    gPad.Update()
+    pedestal_evolution.GetXaxis().SetLabelOffset(0.02)
+    pedestal_evolution.GetYaxis().SetLabelOffset(0.01)
+    canvas_pedestal.SetTicks()
+    gPad.Modified()
+    gPad.Update()
+
+    canvas_cn = TCanvas("canvas_cn", "Common Noise Time Evolution", 700, 700)
+    canvas_cn.cd()
+    cn_evolution.Draw()
+    cn_evolution.SetStats(0)
+    cn_evolution_profile.Draw("same")
+    gPad.Modified()
+    gPad.Update()
+    cn_evolution.GetXaxis().SetLabelOffset(0.02)
+    cn_evolution.GetYaxis().SetLabelOffset(0.01)
+    canvas_cn.SetTicks()
+    gPad.Modified()
+    gPad.Update()
+
+    canvas_sigma.Write()
+    canvas_sigma_raw.Write()
+    canvas_pedestal.Write()
+    canvas_cn.Write()
+
+    outfile.Close()
+
 def buildStkPlots(opts: argparse.Namespace, config: dict):
     local_cal_dir = opts.local if opts.local else "cal"
     if opts.verbose:
@@ -170,11 +362,11 @@ def buildStkPlots(opts: argparse.Namespace, config: dict):
     xinterval = 6
     time_evolution = parseCalLocalDirs(local_cal_dir, opts, config)
     buildEvFigure(time_evolution, plt_variable="sigma", plt_variable_label="sigma", plt_color="firebrick", xaxis_interval=xinterval, yaxis_title="sigma", plt_path="sigma_evolution.pdf")
-    buildEvFigure(time_evolution, plt_variable="sigma_row", plt_variable_label="sigma raw", plt_color="darkorange", xaxis_interval=xinterval, yaxis_title="sigma row", plt_path="sigmaraw_evolution.pdf")
+    buildEvFigure(time_evolution, plt_variable="sigma_raw", plt_variable_label="sigma raw", plt_color="darkorange", xaxis_interval=xinterval, yaxis_title="sigma raw", plt_path="sigmaraw_evolution.pdf")
     buildEvFigure(time_evolution, plt_variable="pedestal", plt_variable_label="pedestal", plt_color="forestgreen", xaxis_interval=xinterval, yaxis_title="pedestal" , plt_path="pedestal_evolution.pdf")
     buildEvFigure(time_evolution, plt_variable="cn", plt_variable_label="common noise", plt_color="mediumturquoise", xaxis_interval=xinterval, yaxis_title="common noise", plt_path="cn_evolution.pdf")
     buildEvFigure(time_evolution, plt_variable="chfrac_s5", plt_variable_label="ch frac sigma < 5", plt_color="cornflowerblue", xaxis_interval=xinterval, yaxis_title="channel fraction sigma < 5", plt_path="chfrac_sigma_5.pdf")
     buildEvFigure(time_evolution, plt_variable="chfrac_s510", plt_variable_label="ch frac 5 < sigma < 10", plt_color="sandybrown", xaxis_interval=xinterval, yaxis_title="channel fraction 5 < sigma < 10", plt_path="chfrac_sigma_5_10.pdf")
     buildEvFigure(time_evolution, plt_variable="chfrac_s10", plt_variable_label="ch frac sigma > 10", plt_color="firebrick", xaxis_interval=xinterval, yaxis_title="channel fraction sigma > 10", plt_path="chfrac_sigma_10.pdf")
     buildChSigmaEv(time_evolution, xaxis_interval=xinterval, plt_path="channel_noise_evolution.pdf") 
-
+    buildROOThistos(time_evolution, out_filename="ladder_time_info.root")
