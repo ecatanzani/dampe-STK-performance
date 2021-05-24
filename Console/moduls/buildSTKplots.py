@@ -1,19 +1,16 @@
-from datetime import date, time
+from datetime import date, timedelta
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib import rcParams
-from ROOT import TFile, TH2D, TProfile, TDatime, TCanvas, gStyle, gROOT, gPad
+from ROOT import TFile, TH1D, TH2D, TProfile, TDatime, TCanvas, gStyle, gROOT, gPad
 import argparse
 import os
+from downloadCal import updateCalFiles, getDateFromDir
 
-def getDateFromDir(local_cal_dir: str) -> date:
-    year = int(local_cal_dir[local_cal_dir.rfind('/')+1:local_cal_dir.rfind('/')+5])
-    month = int(local_cal_dir[local_cal_dir.rfind('/')+5:local_cal_dir.rfind('/')+7])
-    day = int(local_cal_dir[local_cal_dir.rfind('/')+7:])
-    return date(year, month, day)
+
 
 def buildTRBfileList(local_cal_dir: str) -> list:
     trbfiles = []
@@ -30,6 +27,7 @@ def buildCalDict(local_cal_dir: str) -> dict:
     return dict(zip(trbs, trb_dicts))
 
 def readCalDict(file_cal_dict: dict) -> tuple:
+    all_sigma_values = []
     trbs_sigma_mean = []
     trbs_rawsigma_mean = []
     trbs_ped_mean = []
@@ -46,9 +44,10 @@ def readCalDict(file_cal_dict: dict) -> tuple:
         ch5_10 = []
         ch10 = []
         for ladder_value in file_cal_dict[trb_value]:
-            df = pd.read_csv(file_cal_dict[trb_value][ladder_value])
+            df = pd.read_csv(file_cal_dict[trb_value][ladder_value], header=None)
             df.columns=["ch", "va", "chva", "ped", "sigma_raw", "sigma", "status", "status_2", "status_3"]
             df = df.drop(list(range(383, 386)))
+            all_sigma_values += list(df['sigma'])
             tmp_sigma_mean.append(df['sigma'].mean())
             tmp_sigmaraw_mean.append(df['sigma_raw'].mean())
             tmp_ped_mean.append(df['ped'].mean())
@@ -71,7 +70,7 @@ def readCalDict(file_cal_dict: dict) -> tuple:
     dict_ch5 = [dict(zip(range(len(trbs_cn_mean[0])), ch)) for ch in ch5_tot]
     dict_ch5_10 = [dict(zip(range(len(trbs_cn_mean[0])), ch)) for ch in ch5_10_tot]
     dict_ch10 = [dict(zip(range(len(trbs_cn_mean[0])), ch)) for ch in ch10_tot]
-    return (dict(zip(trbs, dict_sigma_mean)), dict(zip(trbs, dict_sigmaraw_mean)), dict(zip(trbs, dict_ped_mean)), dict(zip(trbs, dict_cn_mean)), dict(zip(trbs, dict_ch5)), dict(zip(trbs, dict_ch5_10)), dict(zip(trbs, dict_ch10)))
+    return (dict(zip(trbs, dict_sigma_mean)), dict(zip(trbs, dict_sigmaraw_mean)), dict(zip(trbs, dict_ped_mean)), dict(zip(trbs, dict_cn_mean)), dict(zip(trbs, dict_ch5)), dict(zip(trbs, dict_ch5_10)), dict(zip(trbs, dict_ch10))), all_sigma_values
 
 def getMeanValue(valdict: dict) -> float:
     trb_meanvalues = []
@@ -101,6 +100,17 @@ def purgeDirs(filelist: list, config:list) -> list:
             purged_filelist.append(cal_dir)
     return purged_filelist
 
+def updateLocalDirs(local_cal_dir: str, local_folders: list, opts: argparse.Namespace, config: dict) -> bool:
+    if opts.verbose:
+        print("updating local directory calibration files...")
+    config['start_date'] = getDateFromDir(local_folders[-1]) + timedelta(days=1)
+    return updateCalFiles(config, opts)
+
+def getCalDirList(local_cal_dir: str) -> list:
+    local_folders = [f"{local_cal_dir}/{folder}" for folder in os.listdir(local_cal_dir) if folder.startswith('20')]
+    local_folders.sort()
+    return local_folders
+
 def parseCalLocalDirs(local_cal_dir: str, opts: argparse.Namespace, config: dict) -> dict:
     caldate = []
     sigma = []
@@ -114,18 +124,27 @@ def parseCalLocalDirs(local_cal_dir: str, opts: argparse.Namespace, config: dict
     chfrac_s5 = []
     chfrac_s510 = []
     chfrac_s10 = []
+    chsigmas = []
 
-    local_folders = [f"{local_cal_dir}/{folder}" for folder in os.listdir(local_cal_dir) if folder.startswith('20')]
-    local_folders.sort()
+    local_folders = getCalDirList(local_cal_dir)
     if opts.local:
+        if opts.update:
+            if updateLocalDirs(local_cal_dir, local_folders, opts, config.copy()):
+                local_folders = getCalDirList(local_cal_dir)
+            else:
+                print(f"Error opdating local calibration folder: [{local_cal_dir}]")
+                return {}
         local_folders = purgeDirs(local_folders, config)
+    
     if not len(local_folders):
         print('No calibration found matching the selected time window... select a different time interval')
         return {}
+    if opts.verbose:
+        print("Parsing calibration files...")
 
     for cal_folder in tqdm(local_folders):
         caldate.append(getDateFromDir(cal_folder))
-        ladder_dicts = readCalDict(buildCalDict(cal_folder))
+        ladder_dicts, sigmas = readCalDict(buildCalDict(cal_folder))
         sigma.append(getMeanValue(ladder_dicts[0]))
         sigma_values.append(getValues(ladder_dicts[0]))
         sigma_raw.append(getMeanValue(ladder_dicts[1]))
@@ -137,7 +156,8 @@ def parseCalLocalDirs(local_cal_dir: str, opts: argparse.Namespace, config: dict
         chfrac_s5.append(getChannelFraction(ladder_dicts[4]))
         chfrac_s510.append(getChannelFraction(ladder_dicts[5]))
         chfrac_s10.append(getChannelFraction(ladder_dicts[6]))
-    return {'date': caldate, 'sigma': sigma, 'sigma_values': sigma_values, 'sigma_raw': sigma_raw, 'sigma_raw_values': sigma_raw_values, 'pedestal': ped, 'pedestal_values': ped_values, 'cn': cn, 'cn_values': cn_values, 'chfrac_s5': chfrac_s5, 'chfrac_s510': chfrac_s510, 'chfrac_s10': chfrac_s10}
+        chsigmas.append(sigmas)
+    return {'date': caldate, 'sigma': sigma, 'sigma_values': sigma_values, 'sigma_raw': sigma_raw, 'sigma_raw_values': sigma_raw_values, 'pedestal': ped, 'pedestal_values': ped_values, 'cn': cn, 'cn_values': cn_values, 'chfrac_s5': chfrac_s5, 'chfrac_s510': chfrac_s510, 'chfrac_s10': chfrac_s10, 'chsigmas': chsigmas}
 
 def buildEvFigure(time_evolution: dict, plt_variable: str, plt_variable_label: str, plt_color: str, xaxis_interval: int, yaxis_title: str, plt_path: str) -> plt.figure:
     fig, ax = plt.subplots(clear=True)
@@ -293,6 +313,16 @@ def buildROOThistos(time_evolution: dict, out_filename: str):
     cn_evolution.Write()
     cn_evolution_profile.Write()
     
+    sigma_distribution_per_day = []
+    for idx, chsigma in enumerate(time_evolution['chsigmas']):
+        tmpdate = TDatime(time_evolution['date'][idx].year, time_evolution['date'][idx].month, time_evolution['date'][idx].day, 12, 0, 0).Convert()
+        tmphisto = TH1D(f"hsigmach_{tmpdate}",f"hsigmach_{tmpdate}", 1000, 0, 100)
+        for channel in chsigma:
+            tmphisto.Fill(channel)
+        tmphisto.GetXaxis().SetTitle('#sigma (ADC)')
+        tmphisto.GetYaxis().SetTitle('counts')
+        sigma_distribution_per_day.append(tmphisto)
+
     gStyle.SetLineWidth(3)
     
     canvas_sigma = TCanvas("canvas_sigma", "sigma Time Evolution", 700, 700)
@@ -352,15 +382,20 @@ def buildROOThistos(time_evolution: dict, out_filename: str):
     canvas_pedestal.Write()
     canvas_cn.Write()
 
+    outfile.mkdir('sigmas')
+    outfile.cd('sigmas')
+    for histo in sigma_distribution_per_day:
+        histo.Write()
+
     outfile.Close()
 
 def buildStkPlots(opts: argparse.Namespace, config: dict):
     local_cal_dir = opts.local if opts.local else "cal"
-    if opts.verbose:
-        print(f"\nGetting time evolution information from local dir: {local_cal_dir}\n")
-    
-    xinterval = 6
     time_evolution = parseCalLocalDirs(local_cal_dir, opts, config)
+    if opts.verbose:
+        print(f"Getting time evolution information from local dir: {local_cal_dir}")
+
+    xinterval = 6
     buildEvFigure(time_evolution, plt_variable="sigma", plt_variable_label="sigma", plt_color="firebrick", xaxis_interval=xinterval, yaxis_title="sigma", plt_path="sigma_evolution.pdf")
     buildEvFigure(time_evolution, plt_variable="sigma_raw", plt_variable_label="sigma raw", plt_color="darkorange", xaxis_interval=xinterval, yaxis_title="sigma raw", plt_path="sigmaraw_evolution.pdf")
     buildEvFigure(time_evolution, plt_variable="pedestal", plt_variable_label="pedestal", plt_color="forestgreen", xaxis_interval=xinterval, yaxis_title="pedestal" , plt_path="pedestal_evolution.pdf")

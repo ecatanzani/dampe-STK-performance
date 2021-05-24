@@ -17,7 +17,13 @@ def getdate_str(file_date: date) -> str:
     month = str(f"0{file_date.month}") if file_date.month < 10 else str(file_date.month)
     day = str(f"0{file_date.day}") if file_date.day < 10 else str(file_date.day)
     return f"{year}{month}{day}"
-    
+
+def getDateFromDir(local_cal_dir: str) -> date:
+    year = int(local_cal_dir[local_cal_dir.rfind('/')+1:local_cal_dir.rfind('/')+5])
+    month = int(local_cal_dir[local_cal_dir.rfind('/')+5:local_cal_dir.rfind('/')+7])
+    day = int(local_cal_dir[local_cal_dir.rfind('/')+7:])
+    return date(year, month, day)
+
 def checkLocalDir(local_dir: str) -> bool:
     status = True
     if (os.path.exists(local_dir)):
@@ -120,20 +126,26 @@ def pruneDownloadedFiles(local_dir: str) -> bool:
         for calfile in cals:
             shutil.move(calfile, f"{local_dir}/{day_cal}/{calfile[calfile.rfind('/')+1:]}")
 
-def checkDownloadedFiles(opts: argparse.Namespace, local_dir: str = "cal") -> bool:
+def checkDownloadedFiles(opts: argparse.Namespace, local_dir: str = "cal", config: dict = {}) -> bool:
     status = True
     nladders = 192
     if opts.verbose:
         print("Checking downloaded calibration files")
     for day_cal in tqdm([_dir for _dir in os.listdir(local_dir) if not _dir.startswith('.')]):
-        raw_dir = [raw for raw in os.listdir(f"{local_dir}/{day_cal}") if not raw.startswith('.')][0]
-        cals = [cal for cal in os.listdir(f"{local_dir}/{day_cal}/{raw_dir}") if cal.endswith('.cal')]
+        prune = False
+        if len(config) and getDateFromDir(day_cal) < config['start_date']:
+                cals = [cal for cal in os.listdir(f"{local_dir}/{day_cal}") if cal.endswith('.cal')]
+        else:
+            raw_dir = [raw for raw in os.listdir(f"{local_dir}/{day_cal}") if not raw.startswith('.')][0]
+            cals = [cal for cal in os.listdir(f"{local_dir}/{day_cal}/{raw_dir}") if cal.endswith('.cal')]
+            prune = True
         if len(cals) is not nladders:
             status = False
             print(f"Error: check calibration files in {day_cal}/{raw_dir}")
             break
         else:
-            pruneSignleDownloadedDir(raw_dir, cals, local_dir, day_cal)
+            if prune:
+                pruneSignleDownloadedDir(raw_dir, cals, local_dir, day_cal)
     return status
 
 def getCalFiles(config: dict, opts: argparse.Namespace, local_dir: str = "cal") -> bool:
@@ -149,4 +161,12 @@ def getCalFiles(config: dict, opts: argparse.Namespace, local_dir: str = "cal") 
         else:
             print('No calibration found matching the selected time window... select a different time interval')
             return False
-    
+
+def updateCalFiles(config: dict, opts: argparse.Namespace, local_dir: str = "cal") -> bool:
+    file_dict = parseXrootDfiles(config, opts, local_dir)
+    if len(file_dict):
+        downloadFiles(file_dict, local_dir, config, opts)
+        return checkDownloadedFiles(opts, local_dir, config)
+    else:
+        print('No more claibrations...')
+        return True

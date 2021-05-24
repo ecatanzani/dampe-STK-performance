@@ -8,6 +8,8 @@ def main(args=None):
 
     parser.add_argument("-l", "--local", type=str, dest='local',
                         help='use local calibration directory')
+    parser.add_argument("-u", "--update", dest='update', default=False,
+                        action='store_true', help='update local folder')
     parser.add_argument("-v", "--verbose", dest='verbose', default=False,
                         action='store_true', help='run in high verbosity mode')
     opts = parser.parse_args(args)
