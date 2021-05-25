@@ -47,7 +47,7 @@ def readCalDict(file_cal_dict: dict) -> tuple:
             df = pd.read_csv(file_cal_dict[trb_value][ladder_value], header=None)
             df.columns=["ch", "va", "chva", "ped", "sigma_raw", "sigma", "status", "status_2", "status_3"]
             df = df.drop(list(range(383, 386)))
-            all_sigma_values += list(df['sigma'])
+            all_sigma_values.append(list(df['sigma']))
             tmp_sigma_mean.append(df['sigma'].mean())
             tmp_sigmaraw_mean.append(df['sigma_raw'].mean())
             tmp_ped_mean.append(df['ped'].mean())
@@ -314,14 +314,19 @@ def buildROOThistos(time_evolution: dict, out_filename: str):
     cn_evolution_profile.Write()
     
     sigma_distribution_per_day = []
+    sigma_distribution_per_day_alltracker = []
     for idx, chsigma in enumerate(time_evolution['chsigmas']):
         tmpdate = TDatime(time_evolution['date'][idx].year, time_evolution['date'][idx].month, time_evolution['date'][idx].day, 12, 0, 0).Convert()
-        tmphisto = TH1D(f"hsigmach_{tmpdate}",f"hsigmach_{tmpdate}", 1000, 0, 100)
-        for channel in chsigma:
-            tmphisto.Fill(channel)
-        tmphisto.GetXaxis().SetTitle('#sigma (ADC)')
-        tmphisto.GetYaxis().SetTitle('counts')
-        sigma_distribution_per_day.append(tmphisto)
+        tmphisto_tracker = TH1D(f"hsigmach_{tmpdate}",f"hsigmach_{tmpdate}", 1000, 0, 100)
+        for ladder_idx, ladder in enumerate(chsigma): 
+            tmphisto = TH1D(f"hsigmach_{tmpdate}_ladder_{ladder_idx}",f"hsigmach_{tmpdate}_ladder_{ladder_idx}", 1000, 0, 100)
+            tmphisto.GetXaxis().SetTitle('#sigma (ADC)')
+            tmphisto.GetYaxis().SetTitle('counts')
+            for channel_noise_adc in ladder:
+                tmphisto.Fill(channel_noise_adc)
+                tmphisto_tracker.Fill(channel_noise_adc)
+            sigma_distribution_per_day.append(tmphisto)
+        sigma_distribution_per_day_alltracker.append(tmphisto_tracker)
 
     gStyle.SetLineWidth(3)
     
@@ -385,6 +390,8 @@ def buildROOThistos(time_evolution: dict, out_filename: str):
     outfile.mkdir('sigmas')
     outfile.cd('sigmas')
     for histo in sigma_distribution_per_day:
+        histo.Write()
+    for histo in sigma_distribution_per_day_alltracker:
         histo.Write()
 
     outfile.Close()
